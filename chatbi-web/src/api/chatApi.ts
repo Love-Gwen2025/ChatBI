@@ -38,13 +38,16 @@ export const getMessages = (conversationId: string) =>
 export const chat = (conversationId: string, message: string) =>
   request.post<{ reply: string }>('/chat', { conversationId, message });
 
-// SSE 流式对话 URL（携带 token 用于鉴权）
-export const getStreamUrl = (conversationId: string, message: string) => {
+// 流式对话（使用 fetch 读取流，避免在 URL 中携带 token/message）
+export const streamChat = (conversationId: string, message: string, signal?: AbortSignal) => {
   const token = authStore.getToken();
-  const params = new URLSearchParams({
-    conversationId,
-    message,
-    ...(token ? { token } : {}),
+  return fetch('/api/chat/stream', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ conversationId, message }),
+    signal,
   });
-  return `/api/chat/stream?${params.toString()}`;
 };

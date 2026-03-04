@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Layout, message, Button } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Layout, message, Button, Drawer } from 'antd';
+import { ArrowLeftOutlined, MenuOutlined } from '@ant-design/icons';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import ConversationList from '../components/ConversationList';
 import ChatPanel from '../components/ChatPanel';
@@ -12,13 +12,15 @@ import {
 } from '../api/chatApi';
 import type { Project } from '../api/projectApi';
 
-const { Sider, Content } = Layout;
+const { Content } = Layout;
 
 interface ProjectContext {
   project: Project & { role: string };
 }
 
 const PAGE_SIZE = 20;
+const SIDEBAR_WIDTH = 280;
+const MOBILE_BREAKPOINT = 768;
 
 export default function ChatPage() {
   const navigate = useNavigate();
@@ -28,6 +30,14 @@ export default function ChatPage() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < MOBILE_BREAKPOINT);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const loadConversations = useCallback(async (p = 1, append = false) => {
     try {
@@ -57,6 +67,7 @@ export default function ChatPage() {
       const res = await createConversation();
       setConversations((prev) => [res.data, ...prev]);
       setActiveConv(res.data);
+      if (isMobile) setMobileDrawerOpen(false);
     } catch {
       message.error('创建会话失败');
     }
@@ -78,33 +89,117 @@ export default function ChatPage() {
     loadConversations(page + 1, true);
   };
 
+  const handleSelect = (conv: Conversation) => {
+    setActiveConv(conv);
+    if (isMobile) setMobileDrawerOpen(false);
+  };
+
+  const sidebarHeader = (
+    <div style={{
+      padding: '16px 16px 8px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+    }}>
+      <Button
+        type="text"
+        icon={<ArrowLeftOutlined />}
+        size="small"
+        onClick={() => navigate('/projects')}
+        style={{ color: 'var(--sidebar-text)', borderRadius: 8 }}
+      />
+      <span style={{
+        fontFamily: "'Plus Jakarta Sans', sans-serif",
+        fontWeight: 700,
+        fontSize: 15,
+        flex: 1,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+        color: 'var(--sidebar-text-active)',
+      }}>
+        {project.name}
+      </span>
+    </div>
+  );
+
+  const sidebarContent = (
+    <div style={{
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      background: 'var(--sidebar-bg)',
+    }}>
+      {sidebarHeader}
+      <ConversationList
+        conversations={conversations}
+        activeId={activeConv?.id ?? null}
+        onSelect={handleSelect}
+        onCreate={handleCreate}
+        onDelete={handleDelete}
+        hasMore={hasMore}
+        loadingMore={loadingMore}
+        onLoadMore={handleLoadMore}
+      />
+    </div>
+  );
+
   return (
-    <Layout style={{ height: '100vh' }}>
-      <Sider width={260} theme="light" style={{ borderRight: '1px solid #f0f0f0' }}>
-        <div style={{ padding: '12px 12px 4px', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Button
-            type="text"
-            icon={<ArrowLeftOutlined />}
-            size="small"
-            onClick={() => navigate('/projects')}
-          />
-          <span style={{ fontWeight: 700, fontSize: 16, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {project.name}
-          </span>
+    <Layout style={{ height: '100vh', flexDirection: 'row', background: 'var(--surface-secondary)' }}>
+      {/* Desktop Sidebar */}
+      {!isMobile && (
+        <div style={{
+          width: SIDEBAR_WIDTH,
+          flexShrink: 0,
+          height: '100vh',
+          background: 'var(--sidebar-bg)',
+          borderRight: '1px solid var(--sidebar-border)',
+        }}>
+          {sidebarContent}
         </div>
-        <ConversationList
-          conversations={conversations}
-          activeId={activeConv?.id ?? null}
-          onSelect={setActiveConv}
-          onCreate={handleCreate}
-          onDelete={handleDelete}
-          hasMore={hasMore}
-          loadingMore={loadingMore}
-          onLoadMore={handleLoadMore}
+      )}
+
+      {/* Mobile Drawer */}
+      {isMobile && (
+        <Drawer
+          placement="left"
+          open={mobileDrawerOpen}
+          onClose={() => setMobileDrawerOpen(false)}
+          width={SIDEBAR_WIDTH}
+          styles={{
+            body: { padding: 0, background: 'var(--sidebar-bg)' },
+            header: { display: 'none' },
+          }}
+        >
+          {sidebarContent}
+        </Drawer>
+      )}
+
+      <Content style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', flex: 1, minHeight: 0 }}>
+        {/* Mobile header */}
+        {isMobile && (
+          <div style={{
+            padding: '12px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            borderBottom: '1px solid var(--border-secondary)',
+            background: 'var(--surface-primary)',
+          }}>
+            <Button
+              type="text"
+              icon={<MenuOutlined />}
+              onClick={() => setMobileDrawerOpen(true)}
+              style={{ borderRadius: 8 }}
+            />
+            <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
+              {project.name}
+            </span>
+          </div>
+        )}
+        <ChatPanel
+          conversationId={activeConv ? String(activeConv.id) : null}
         />
-      </Sider>
-      <Content>
-        <ChatPanel conversationId={activeConv ? String(activeConv.id) : null} />
       </Content>
     </Layout>
   );
