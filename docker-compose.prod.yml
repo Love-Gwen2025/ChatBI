@@ -99,8 +99,8 @@ services:
   chatbi-web:
     image: ghcr.io/love-gwen2025/chatbi-web:main
     container_name: chatbi-web
-    expose:
-      - "80"
+    ports:
+      - "127.0.0.1:8081:80"
     depends_on:
       - chatbi-server
     networks:
