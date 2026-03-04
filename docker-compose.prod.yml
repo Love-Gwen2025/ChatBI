@@ -38,7 +38,7 @@ services:
 
   # ---------- MCP Server ----------
   mcp-server:
-    image: ghcr.io/love-gwen2025/mcp-server:latest
+    image: ghcr.io/love-gwen2025/mcp-server:master
     container_name: chatbi-mcp
     environment:
       - PORT=8000
@@ -59,7 +59,7 @@ services:
       - 1panel-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/sse')\""]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -67,7 +67,7 @@ services:
 
   # ---------- 后端 ----------
   chatbi-server:
-    image: ghcr.io/love-gwen2025/chatbi-server:latest
+    image: ghcr.io/love-gwen2025/chatbi-server:main
     container_name: chatbi-server
     environment:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://chatbi-postgres:5432/${DB_NAME:-chatbi}
@@ -84,7 +84,7 @@ services:
       redis:
         condition: service_healthy
       mcp-server:
-        condition: service_healthy
+        condition: service_started
     networks:
       - 1panel-network
     restart: unless-stopped
@@ -97,10 +97,10 @@ services:
 
   # ---------- 前端 ----------
   chatbi-web:
-    image: ghcr.io/love-gwen2025/chatbi-web:latest
+    image: ghcr.io/love-gwen2025/chatbi-web:main
     container_name: chatbi-web
-    ports:
-      - "${WEB_PORT:-80}:80"
+    expose:
+      - "80"
     depends_on:
       - chatbi-server
     networks:
