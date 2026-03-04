@@ -46,6 +46,10 @@ langchain4j:
       model-name: text-embedding-v3
       dimensions: 1024
 
+mcp:
+  server:
+    url: ${MCP_SERVER_URL:http://localhost:8000/sse}
+
 jwt:
   secret: ${JWT_SECRET:ChatBI2026DefaultDevSecretKeyMustBeReplacedInProduction!!}
   expiration: 86400000

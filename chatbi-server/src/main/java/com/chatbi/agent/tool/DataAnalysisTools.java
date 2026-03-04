@@ -34,7 +34,9 @@ public class DataAnalysisTools {
 
         // 硬限制：同一次对话调用中最多搜索 MAX_SCHEMA_SEARCH 次
         Integer count = params.get("_schemaSearchCount");
-        if (count == null) count = 0;
+        if (count == null) {
+            count = 0;
+        }
         count++;
         params.put("_schemaSearchCount", count);
         if (count > MAX_SCHEMA_SEARCH) {

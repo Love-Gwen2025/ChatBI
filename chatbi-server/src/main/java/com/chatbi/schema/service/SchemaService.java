@@ -11,6 +11,8 @@ import com.chatbi.schema.mapper.TableMetaMapper;
 import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.model.embedding.EmbeddingModel;
+import com.huaban.analysis.jieba.JiebaSegmenter;
+import com.huaban.analysis.jieba.SegToken;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -35,6 +37,8 @@ public class SchemaService {
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
     private final EmbeddingModel embeddingModel;
+
+    private static final JiebaSegmenter SEGMENTER = new JiebaSegmenter();
 
     private static final Set<String> INTERNAL_TABLES = Set.of(
             "table_meta", "column_meta", "conversation",
@@ -150,7 +154,9 @@ public class SchemaService {
     private String vectorToString(float[] vector) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < vector.length; i++) {
-            if (i > 0) sb.append(",");
+            if (i > 0) {
+                sb.append(",");
+            }
             sb.append(vector[i]);
         }
         sb.append("]");
@@ -190,57 +196,77 @@ public class SchemaService {
     }
 
     /**
-     * ILIKE 搜索（含字段级，MPJ Lambda JOIN）
+     * ILIKE 搜索（单关键词，含字段级，MPJ Lambda JOIN）
      */
     public List<TableMeta> searchTablesWithColumns(String keyword, int topK, Long projectId) {
+        return searchTablesWithColumns(List.of(keyword), topK, projectId);
+    }
+
+    /**
+     * ILIKE 搜索（多关键词合并为一条 SQL，OR 拼接，1 次 DB 往返）
+     */
+    public List<TableMeta> searchTablesWithColumns(List<String> keywords, int topK, Long projectId) {
+        if (keywords.isEmpty()) {
+            return List.of();
+        }
         MPJLambdaWrapper<TableMeta> wrapper = new MPJLambdaWrapper<TableMeta>()
                 .selectAll(TableMeta.class)
                 .leftJoin(ColumnMeta.class, ColumnMeta::getTableId, TableMeta::getId)
                 .eq(TableMeta::getProjectId, projectId)
-                .and(w -> w
-                        .like(TableMeta::getTableName, keyword)
-                        .or().like(TableMeta::getTableComment, keyword)
-                        .or().like(ColumnMeta::getColumnName, keyword)
-                        .or().like(ColumnMeta::getColumnComment, keyword))
+                .and(outer -> {
+                    for (int i = 0; i < keywords.size(); i++) {
+                        String kw = keywords.get(i);
+                        if (i == 0) {
+                            outer.like(TableMeta::getTableName, kw)
+                                    .or().like(TableMeta::getTableComment, kw)
+                                    .or().like(ColumnMeta::getColumnName, kw)
+                                    .or().like(ColumnMeta::getColumnComment, kw);
+                        } else {
+                            outer.or().like(TableMeta::getTableName, kw)
+                                    .or().like(TableMeta::getTableComment, kw)
+                                    .or().like(ColumnMeta::getColumnName, kw)
+                                    .or().like(ColumnMeta::getColumnComment, kw);
+                        }
+                    }
+                })
                 .distinct()
                 .last("LIMIT " + topK);
         return tableMetaMapper.selectJoinList(TableMeta.class, wrapper);
     }
 
     /**
-     * 混合搜索：向量 + ILIKE（始终拆词），合并去重
+     * 混合搜索：向量 + ILIKE（jieba 分词），合并去重
      */
     public String searchAndBuildSchemaText(String query, int topK, Long projectId) {
         // 1. 向量搜索
         List<TableMeta> results = new ArrayList<>(vectorSearch(query, topK, projectId));
         Set<Long> seen = results.stream().map(TableMeta::getId).collect(Collectors.toSet());
 
-        // 2. ILIKE 搜索（始终拆词，不仅在空结果时）
-        String[] keywords = query.split("[\\s,，。、]+");
-        for (String kw : keywords) {
-            if (kw.length() >= 2) {
-                for (TableMeta t : searchTablesWithColumns(kw, topK, projectId)) {
-                    if (seen.add(t.getId())) {
-                        results.add(t);
-                    }
-                }
-            }
+        // 2. jieba 分词，收集所有关键词（分词结果 + 原始 query）
+        List<String> keywords = new ArrayList<>(
+                SEGMENTER.process(query, JiebaSegmenter.SegMode.SEARCH)
+                        .stream()
+                        .map(token -> token.word.trim())
+                        .filter(w -> w.length() >= 2)
+                        .distinct()
+                        .toList());
+        if (query.length() >= 2 && !keywords.contains(query)) {
+            keywords.add(query);
         }
-        // 整体查询也做一次 ILIKE（不拆词）
-        if (query.length() >= 2) {
-            for (TableMeta t : searchTablesWithColumns(query, topK, projectId)) {
-                if (seen.add(t.getId())) {
-                    results.add(t);
-                }
+
+        // 3. 一次 DB 查询完成所有关键词的 ILIKE 匹配
+        for (TableMeta t : searchTablesWithColumns(keywords, topK, projectId)) {
+            if (seen.add(t.getId())) {
+                results.add(t);
             }
         }
 
-        // 3. 截断
+        // 4. 截断
         if (results.size() > topK) {
             results = results.subList(0, topK);
         }
 
-        // 4. 直接拼接已存储的 schema_text（无需再查 column_meta）
+        // 5. 拼接 schema_text
         if (results.isEmpty()) {
             return "未找到与查询相关的表。";
         }
@@ -282,8 +308,12 @@ public class SchemaService {
      */
     public String buildSchemaText(Long tableId) {
         TableMeta table = tableMetaMapper.selectById(tableId);
-        if (table == null) return "";
-        if (table.getSchemaText() != null) return table.getSchemaText();
+        if (table == null) {
+            return "";
+        }
+        if (table.getSchemaText() != null) {
+            return table.getSchemaText();
+        }
         List<ColumnMeta> columns = getColumns(tableId);
         return buildSchemaText(table, columns);
     }

@@ -111,6 +111,20 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- LangChain4j MCP Client -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-mcp-client</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+
+        <!-- Jieba 中文分词 -->
+        <dependency>
+            <groupId>com.huaban</groupId>
+            <artifactId>jieba-analysis</artifactId>
+            <version>1.0.2</version>
+        </dependency>
+
         <!-- Validation -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
