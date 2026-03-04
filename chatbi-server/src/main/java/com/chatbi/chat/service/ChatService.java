@@ -44,6 +44,10 @@ public class ChatService {
         if (conv == null) {
             throw new IllegalArgumentException("会话不存在");
         }
+        Long userId = UserContext.getUserId();
+        if (userId == null || conv.getUserId() == null || !userId.equals(conv.getUserId())) {
+            throw new SecurityException("无权访问该会话");
+        }
         Long projectId = UserContext.getProjectId();
         if (projectId != null && !projectId.equals(conv.getProjectId())) {
             throw new SecurityException("无权访问该会话");

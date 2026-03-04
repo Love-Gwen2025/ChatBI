@@ -10,7 +10,8 @@ public final class SqlSanitizer {
 
     private static final Set<String> FORBIDDEN_KEYWORDS = Set.of(
             "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE",
-            "CREATE", "GRANT", "REVOKE", "EXEC", "EXECUTE", "CALL"
+            "CREATE", "GRANT", "REVOKE", "EXEC", "EXECUTE", "CALL",
+            "INTO", "COPY"
     );
 
     private static final Pattern COMMENT_PATTERN = Pattern.compile(
@@ -31,7 +32,12 @@ public final class SqlSanitizer {
 
         // 去除注释
         String cleaned = COMMENT_PATTERN.matcher(sql).replaceAll(" ").trim();
-        String upper = cleaned.toUpperCase();
+        // 禁止多语句
+        String noTrailing = cleaned.replaceAll(";+$", "").trim();
+        if (noTrailing.contains(";")) {
+            return "不支持多语句 SQL";
+        }
+        String upper = noTrailing.toUpperCase();
 
         // 必须以 SELECT 或 WITH 开头
         if (!upper.startsWith("SELECT") && !upper.startsWith("WITH")) {
@@ -41,7 +47,7 @@ public final class SqlSanitizer {
         // 检查是否包含禁止关键字（作为独立单词）
         for (String keyword : FORBIDDEN_KEYWORDS) {
             if (Pattern.compile("\\b" + keyword + "\\b", Pattern.CASE_INSENSITIVE)
-                    .matcher(cleaned).find()) {
+                    .matcher(noTrailing).find()) {
                 return "SQL 包含禁止操作: " + keyword;
             }
         }

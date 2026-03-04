@@ -9,11 +9,14 @@ import dev.langchain4j.agent.tool.Tool;
 import dev.langchain4j.invocation.InvocationParameters;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.ColumnMapRowMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Component
@@ -26,6 +29,16 @@ public class DataAnalysisTools {
 
     private static final int MAX_ROWS = 100;
     private static final int MAX_SCHEMA_SEARCH = 3;
+    private static final int QUERY_TIMEOUT_SECONDS = 5;
+
+    private static final Set<String> FORBIDDEN_TABLES = Set.of(
+            "sys_user", "project", "user_project",
+            "table_meta", "column_meta", "conversation"
+    );
+    private static final Pattern TABLE_WORD_PATTERN = Pattern.compile(
+            "\\b(" + String.join("|", FORBIDDEN_TABLES) + ")\\b",
+            Pattern.CASE_INSENSITIVE
+    );
 
     @Tool("根据用户问题关键词搜索相关的数据库表结构，返回表名、字段名、字段类型和注释。" +
             "在生成 SQL 之前必须先调用此工具了解可用的表和字段。")
@@ -57,17 +70,31 @@ public class DataAnalysisTools {
 
     @Tool("执行 SQL SELECT 查询并返回 JSON 格式结果。仅支持 SELECT 语句，最多返回 100 行。" +
             "如果执行失败会返回错误信息，请根据错误修正 SQL 后重试。")
-    public String executeSql(@P("要执行的 PostgreSQL SELECT 语句") String sql) {
+    public String executeSql(@P("要执行的 PostgreSQL SELECT 语句") String sql, InvocationParameters params) {
         log.info("[Tool] executeSql: {}", sql);
+
+        Long projectId = params != null ? params.get("projectId") : null;
+        if (projectId == null || projectId <= 0) {
+            return "未选择项目，拒绝执行 SQL。";
+        }
 
         String error = SqlSanitizer.validate(sql);
         if (error != null) {
             return "SQL 校验失败: " + error;
         }
 
+        // 保护内部表，避免意外暴露账号/项目等敏感数据
+        if (TABLE_WORD_PATTERN.matcher(sql).find()) {
+            return "SQL 校验失败: 禁止查询内部系统表";
+        }
+
         try {
-            String safeSql = ensureLimit(sql, MAX_ROWS);
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(safeSql);
+            String safeSql = enforceHardLimit(sql, MAX_ROWS);
+            List<Map<String, Object>> rows = jdbcTemplate.query(con -> {
+                var ps = con.prepareStatement(safeSql);
+                ps.setQueryTimeout(QUERY_TIMEOUT_SECONDS);
+                return ps;
+            }, new ColumnMapRowMapper());
             String json = objectMapper.writeValueAsString(rows);
             log.info("[Tool] executeSql 返回 {} 行", rows.size());
             return json;
@@ -80,11 +107,9 @@ public class DataAnalysisTools {
         }
     }
 
-    private String ensureLimit(String sql, int maxRows) {
-        String upper = sql.trim().toUpperCase();
-        if (!upper.contains("LIMIT")) {
-            return sql.trim().replaceAll(";$", "") + " LIMIT " + maxRows;
-        }
-        return sql;
+    private String enforceHardLimit(String sql, int maxRows) {
+        String cleaned = sql.trim().replaceAll(";+$", "").trim();
+        // 强制包一层，避免用户写了超大 LIMIT 或者无 LIMIT 导致资源消耗
+        return "SELECT * FROM (" + cleaned + ") AS chatbi_q LIMIT " + maxRows;
     }
 }

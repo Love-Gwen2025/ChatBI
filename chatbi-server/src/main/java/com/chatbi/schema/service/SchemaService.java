@@ -45,6 +45,19 @@ public class SchemaService {
             "sys_user", "project", "user_project"
     );
 
+    public void requireTableInProject(Long tableId, Long projectId) {
+        if (tableId == null || projectId == null) {
+            throw new SecurityException("无权访问该表");
+        }
+        Long count = tableMetaMapper.selectCount(
+                new LambdaQueryWrapper<TableMeta>()
+                        .eq(TableMeta::getId, tableId)
+                        .eq(TableMeta::getProjectId, projectId));
+        if (count == 0) {
+            throw new SecurityException("无权访问该表");
+        }
+    }
+
     @Transactional
     public int importFromDatabase(String prefix, Long projectId) {
         int count = 0;

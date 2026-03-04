@@ -20,7 +20,6 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = "*")
 @RequiredArgsConstructor
 public class ChatController {
 
@@ -33,12 +32,14 @@ public class ChatController {
         return Map.of("reply", reply != null ? reply : "");
     }
 
-    @GetMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux<String> chatStream(@RequestParam String conversationId,
-                                   @RequestParam String message) {
+    @PostMapping(value = "/chat/stream", produces = MediaType.APPLICATION_NDJSON_VALUE)
+    public Flux<String> chatStream(@RequestBody ChatRequest request) {
+        if (request == null || request.getConversationId() == null || request.getMessage() == null) {
+            throw new IllegalArgumentException("参数不完整");
+        }
         Sinks.Many<String> sink = Sinks.many().unicast().onBackpressureBuffer();
 
-        TokenStream tokenStream = chatService.chatStream(conversationId, message);
+        TokenStream tokenStream = chatService.chatStream(request.getConversationId(), request.getMessage());
 
         tokenStream
                 .beforeToolExecution(before -> {
@@ -105,7 +106,8 @@ public class ChatController {
             for (int i = 0; i < kvPairs.length - 1; i += 2) {
                 event.put(kvPairs[i], kvPairs[i + 1]);
             }
-            sink.tryEmitNext(objectMapper.writeValueAsString(event));
+            // NDJSON: one JSON object per line
+            sink.tryEmitNext(objectMapper.writeValueAsString(event) + "\n");
         } catch (Exception e) {
             log.error("SSE 事件序列化失败", e);
         }

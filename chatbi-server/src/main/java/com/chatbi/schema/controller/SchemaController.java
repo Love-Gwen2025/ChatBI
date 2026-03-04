@@ -21,6 +21,9 @@ public class SchemaController {
     @PostMapping("/import")
     public Map<String, Object> importSchema(@RequestParam(required = false) String prefix) {
         Long projectId = UserContext.getProjectId();
+        if (projectId == null) {
+            throw new IllegalArgumentException("未选择项目");
+        }
         int count = schemaService.importFromDatabase(prefix, projectId);
         Map<String, Object> result = new HashMap<>();
         result.put("imported", count);
@@ -32,6 +35,9 @@ public class SchemaController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
         Long projectId = UserContext.getProjectId();
+        if (projectId == null) {
+            throw new IllegalArgumentException("未选择项目");
+        }
         return schemaService.listTables(projectId, page, size);
     }
 
@@ -40,6 +46,11 @@ public class SchemaController {
             @PathVariable Long tableId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "50") int size) {
+        Long projectId = UserContext.getProjectId();
+        if (projectId == null) {
+            throw new IllegalArgumentException("未选择项目");
+        }
+        schemaService.requireTableInProject(tableId, projectId);
         return schemaService.getColumns(tableId, page, size);
     }
 
@@ -47,12 +58,18 @@ public class SchemaController {
     public String searchSchema(@RequestParam String query,
                                @RequestParam(defaultValue = "5") int topK) {
         Long projectId = UserContext.getProjectId();
+        if (projectId == null) {
+            throw new IllegalArgumentException("未选择项目");
+        }
         return schemaService.searchAndBuildSchemaText(query, topK, projectId);
     }
 
     @PostMapping("/reindex")
     public Map<String, Object> reindexEmbeddings() {
         Long projectId = UserContext.getProjectId();
+        if (projectId == null) {
+            throw new IllegalArgumentException("未选择项目");
+        }
         int count = schemaService.reindexEmbeddings(projectId);
         Map<String, Object> result = new HashMap<>();
         result.put("reindexed", count);

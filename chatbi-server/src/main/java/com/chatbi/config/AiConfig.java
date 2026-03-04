@@ -6,7 +6,7 @@ import com.chatbi.agent.service.StreamingDataAnalysisAssistant;
 import dev.langchain4j.mcp.client.DefaultMcpClient;
 import dev.langchain4j.mcp.client.McpClient;
 import dev.langchain4j.mcp.client.transport.McpTransport;
-import dev.langchain4j.mcp.client.transport.http.StreamableHttpMcpTransport;
+import dev.langchain4j.mcp.client.transport.http.HttpMcpTransport;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.chat.StreamingChatModel;
@@ -31,8 +31,8 @@ public class AiConfig {
 
     @Bean
     public McpToolProvider mcpToolProvider() {
-        McpTransport transport = StreamableHttpMcpTransport.builder()
-                .url(mcpServerUrl)
+        McpTransport transport = HttpMcpTransport.builder()
+                .sseUrl(mcpServerUrl)
                 .logRequests(true)
                 .logResponses(true)
                 .build();

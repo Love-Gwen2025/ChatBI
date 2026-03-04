@@ -22,7 +22,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private static final Set<String> WHITE_LIST = Set.of(
             "/api/auth/login",
-            "/api/auth/register"
+            "/api/auth/register",
+            "/api/health"
     );
 
     @Override
@@ -58,12 +59,17 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             // 从 Redis Session 读取完整上下文（含 projectId）
             SessionInfo session = sessionService.getSession(userId);
-            if (session != null) {
-                info.setNickname(session.getNickname());
-                info.setProjectId(session.getLastLoginProjectId());
-                info.setProjectName(session.getLastLoginProjectName());
-                info.setRole(session.getLastLoginProjectRole());
+            if (session == null) {
+                response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"error\":\"会话已失效，请重新登录\"}");
+                return;
             }
+
+            info.setNickname(session.getNickname());
+            info.setProjectId(session.getLastLoginProjectId());
+            info.setProjectName(session.getLastLoginProjectName());
+            info.setRole(session.getLastLoginProjectRole());
 
             UserContext.set(info);
 
@@ -79,7 +85,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (header != null && header.startsWith("Bearer ")) {
             return header.substring(7);
         }
-        // 2. Query param token（EventSource SSE 场景）
-        return request.getParameter("token");
+        return null;
     }
 }
