@@ -1,23 +1,5 @@
 import request from '../utils/request';
-import type { PageResponse, PageParams } from './types';
-
-export interface Project {
-  id: number;
-  name: string;
-  description: string;
-  tablePrefix: string;
-  role?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Member {
-  userId: number;
-  username: string;
-  nickname: string;
-  role: string;
-  joinedAt: string;
-}
+import type { PageResponse, PageParams, Project, Member } from './types';
 
 export const createProject = (data: { name: string; description?: string; tablePrefix?: string }) =>
   request.post<Project>('/projects', data);

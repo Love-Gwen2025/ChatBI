@@ -2,6 +2,7 @@ package com.chatbi.config;
 
 import com.chatbi.agent.memory.RedisChatMemoryStore;
 import com.chatbi.agent.service.DataAnalysisAssistant;
+import com.chatbi.common.constants.AppConstants;
 import com.chatbi.agent.service.StreamingDataAnalysisAssistant;
 import dev.langchain4j.mcp.client.DefaultMcpClient;
 import dev.langchain4j.mcp.client.McpClient;
@@ -58,7 +59,7 @@ public class AiConfig {
                 .chatModel(chatModel)
                 .chatMemoryProvider(memoryId -> MessageWindowChatMemory.builder()
                         .id(memoryId)
-                        .maxMessages(20)
+                        .maxMessages(AppConstants.MAX_CHAT_MEMORY_MESSAGES)
                         .chatMemoryStore(chatMemoryStore)
                         .build())
                 .toolProvider(mcpToolProvider)
@@ -74,7 +75,7 @@ public class AiConfig {
                 .streamingChatModel(streamingChatModel)
                 .chatMemoryProvider(memoryId -> MessageWindowChatMemory.builder()
                         .id(memoryId)
-                        .maxMessages(20)
+                        .maxMessages(AppConstants.MAX_CHAT_MEMORY_MESSAGES)
                         .chatMemoryStore(chatMemoryStore)
                         .build())
                 .toolProvider(mcpToolProvider)

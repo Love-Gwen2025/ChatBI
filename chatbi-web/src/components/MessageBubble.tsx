@@ -6,7 +6,6 @@ import {
   RightOutlined,
   LoadingOutlined,
   CheckCircleOutlined,
-  SearchOutlined,
   CodeOutlined,
   CopyOutlined,
   CheckOutlined,
@@ -16,32 +15,15 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-export interface ToolCallInfo {
-  name: string;
-  input: string;
-  output?: string;
-  status: 'running' | 'done';
-}
+import type { ToolCallInfo, ChatMessage } from '../api/types';
 
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  toolCalls?: ToolCallInfo[];
-}
+import { TOOL_LABELS, TOOL_ICONS } from '../constants';
+
+export type { ToolCallInfo, ChatMessage };
 
 interface Props {
   message: ChatMessage;
 }
-
-const TOOL_LABELS: Record<string, string> = {
-  schemaSearch: '搜索表结构',
-  executeSql: '执行 SQL',
-};
-
-const TOOL_ICONS: Record<string, typeof SearchOutlined> = {
-  schemaSearch: SearchOutlined,
-  executeSql: CodeOutlined,
-};
 
 function ToolCallPanel({ toolCalls }: { toolCalls: ToolCallInfo[] }) {
   const [expanded, setExpanded] = useState(false);

@@ -5,11 +5,17 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chatbi.auth.entity.SysUser;
 import com.chatbi.auth.mapper.SysUserMapper;
+import com.chatbi.chat.service.ConversationService;
 import com.chatbi.common.PageResponse;
+import com.chatbi.common.constants.RoleConstants;
 import com.chatbi.project.entity.Project;
 import com.chatbi.project.entity.UserProject;
 import com.chatbi.project.mapper.ProjectMapper;
 import com.chatbi.project.mapper.UserProjectMapper;
+import com.chatbi.schema.entity.ColumnMeta;
+import com.chatbi.schema.entity.TableMeta;
+import com.chatbi.schema.mapper.ColumnMetaMapper;
+import com.chatbi.schema.mapper.TableMetaMapper;
 import com.github.yulichang.wrapper.MPJLambdaWrapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -28,6 +34,9 @@ public class ProjectService {
     private final ProjectMapper projectMapper;
     private final UserProjectMapper userProjectMapper;
     private final SysUserMapper sysUserMapper;
+    private final ConversationService conversationService;
+    private final TableMetaMapper tableMetaMapper;
+    private final ColumnMetaMapper columnMetaMapper;
 
     /**
      * 校验用户拥有指定角色，否则抛异常
@@ -58,7 +67,7 @@ public class ProjectService {
         UserProject up = new UserProject();
         up.setUserId(ownerId);
         up.setProjectId(project.getId());
-        up.setRole("OWNER");
+        up.setRole(RoleConstants.OWNER);
         up.setCreatedAt(LocalDateTime.now());
         userProjectMapper.insert(up);
 
@@ -102,8 +111,24 @@ public class ProjectService {
 
     @Transactional
     public void deleteProject(Long projectId) {
+        // 1. 删除项目下所有 column_meta（通过 table_meta JOIN）
+        List<Long> tableIds = tableMetaMapper.selectList(
+                new LambdaQueryWrapper<TableMeta>().eq(TableMeta::getProjectId, projectId)
+                        .select(TableMeta::getId))
+                .stream().map(TableMeta::getId).toList();
+        if (!tableIds.isEmpty()) {
+            columnMetaMapper.delete(
+                    new LambdaQueryWrapper<ColumnMeta>().in(ColumnMeta::getTableId, tableIds));
+        }
+        // 2. 删除项目下所有 table_meta
+        tableMetaMapper.delete(
+                new LambdaQueryWrapper<TableMeta>().eq(TableMeta::getProjectId, projectId));
+        // 3. 删除项目下所有 conversation
+        conversationService.deleteByProjectId(projectId);
+        // 4. 删除 user_project 关系
         userProjectMapper.delete(
                 new LambdaQueryWrapper<UserProject>().eq(UserProject::getProjectId, projectId));
+        // 5. 删除 project 本身
         projectMapper.deleteById(projectId);
     }
 
@@ -124,7 +149,7 @@ public class ProjectService {
         UserProject up = new UserProject();
         up.setUserId(user.getId());
         up.setProjectId(projectId);
-        up.setRole(role != null ? role : "MEMBER");
+        up.setRole(role != null ? role : RoleConstants.MEMBER);
         up.setCreatedAt(LocalDateTime.now());
         userProjectMapper.insert(up);
     }
@@ -155,11 +180,11 @@ public class ProjectService {
         if (target == null) {
             throw new IllegalArgumentException("该用户不是项目成员");
         }
-        if ("OWNER".equals(target.getRole())) {
+        if (RoleConstants.OWNER.equals(target.getRole())) {
             Long ownerCount = userProjectMapper.selectCount(
                     new LambdaQueryWrapper<UserProject>()
                             .eq(UserProject::getProjectId, projectId)
-                            .eq(UserProject::getRole, "OWNER"));
+                            .eq(UserProject::getRole, RoleConstants.OWNER));
             if (ownerCount <= 1) {
                 throw new IllegalArgumentException("不能移除最后一个管理员");
             }

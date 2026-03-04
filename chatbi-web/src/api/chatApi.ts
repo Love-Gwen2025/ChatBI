@@ -1,13 +1,6 @@
 import request from '../utils/request';
 import { authStore } from '../store/authStore';
-import type { PageResponse, PageParams } from './types';
-
-export interface Conversation {
-  id: number;
-  title: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import type { PageResponse, PageParams, Conversation, HistoryMessage } from './types';
 
 // 会话管理
 export const createConversation = (title?: string) =>
@@ -23,12 +16,6 @@ export const renameConversation = (id: number, title: string) =>
   request.put(`/conversations/${id}`, { title });
 
 // 获取会话历史消息
-export interface HistoryMessage {
-  role: string;
-  content: string;
-  toolCalls?: { name: string; input: string; output?: string; status: string }[];
-}
-
 export const getMessages = (conversationId: string) =>
   request.get<HistoryMessage[]>('/chat/messages', {
     params: { conversationId },

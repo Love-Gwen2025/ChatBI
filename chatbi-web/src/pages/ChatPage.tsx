@@ -8,19 +8,11 @@ import {
   createConversation,
   deleteConversation,
   listConversations,
-  type Conversation,
 } from '../api/chatApi';
-import type { Project } from '../api/projectApi';
+import type { Conversation, ProjectContext } from '../api/types';
+import { PAGE_SIZES, LAYOUT } from '../constants';
 
 const { Content } = Layout;
-
-interface ProjectContext {
-  project: Project & { role: string };
-}
-
-const PAGE_SIZE = 20;
-const SIDEBAR_WIDTH = 280;
-const MOBILE_BREAKPOINT = 768;
 
 export default function ChatPage() {
   const navigate = useNavigate();
@@ -31,10 +23,10 @@ export default function ChatPage() {
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < MOBILE_BREAKPOINT);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < LAYOUT.MOBILE_BREAKPOINT);
 
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    const handleResize = () => setIsMobile(window.innerWidth < LAYOUT.MOBILE_BREAKPOINT);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
@@ -42,7 +34,7 @@ export default function ChatPage() {
   const loadConversations = useCallback(async (p = 1, append = false) => {
     try {
       if (append) setLoadingMore(true);
-      const res = await listConversations({ page: p, size: PAGE_SIZE });
+      const res = await listConversations({ page: p, size: PAGE_SIZES.CHAT });
       const { data, totalPages } = res.data;
       if (append) {
         setConversations((prev) => [...prev, ...data]);
@@ -149,7 +141,7 @@ export default function ChatPage() {
       {/* Desktop Sidebar */}
       {!isMobile && (
         <div style={{
-          width: SIDEBAR_WIDTH,
+          width: LAYOUT.SIDEBAR_WIDTH,
           flexShrink: 0,
           height: '100vh',
           background: 'var(--sidebar-bg)',
@@ -165,7 +157,7 @@ export default function ChatPage() {
           placement="left"
           open={mobileDrawerOpen}
           onClose={() => setMobileDrawerOpen(false)}
-          width={SIDEBAR_WIDTH}
+          width={LAYOUT.SIDEBAR_WIDTH}
           styles={{
             body: { padding: 0, background: 'var(--sidebar-bg)' },
             header: { display: 'none' },

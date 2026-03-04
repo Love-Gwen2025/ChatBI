@@ -2,9 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { Button } from 'antd';
 import { SendOutlined, BarChartOutlined, TableOutlined, RiseOutlined, QuestionCircleOutlined } from '@ant-design/icons';
 import MessageBubble, { TypingIndicator } from './MessageBubble';
-import type { ChatMessage, ToolCallInfo } from './MessageBubble';
+import type { ChatMessage, ToolCallInfo } from '../api/types';
 import { streamChat, getMessages } from '../api/chatApi';
 import { authStore } from '../store/authStore';
+import { SSE_EVENTS } from '../constants';
 
 interface Props {
   conversationId: string | null;
@@ -94,14 +95,14 @@ export default function ChatPanel({ conversationId }: Props) {
     let doneReceived = false;
 
     const handleParsedEvent = (parsed: Record<string, unknown>) => {
-      if (parsed?.type === 'tool_start') {
+      if (parsed?.type === SSE_EVENTS.TOOL_START) {
         toolCalls.push({
           name: parsed.name as string,
           input: parsed.detail as string,
           status: 'running',
         });
         updateLastMessage();
-      } else if (parsed?.type === 'tool_end') {
+      } else if (parsed?.type === SSE_EVENTS.TOOL_END) {
         for (let i = toolCalls.length - 1; i >= 0; i--) {
           if (toolCalls[i].name === parsed.name && toolCalls[i].status === 'running') {
             toolCalls[i].status = 'done';
@@ -110,14 +111,14 @@ export default function ChatPanel({ conversationId }: Props) {
           }
         }
         updateLastMessage();
-      } else if (parsed?.type === 'content') {
+      } else if (parsed?.type === SSE_EVENTS.CONTENT) {
         assistantContent += (parsed.content as string) || '';
         updateLastMessage();
-      } else if (parsed?.type === 'error') {
+      } else if (parsed?.type === SSE_EVENTS.ERROR) {
         assistantContent = (parsed.content as string) || '请求失败，请重试。';
         updateLastMessage();
         doneReceived = true;
-      } else if (parsed?.type === 'done') {
+      } else if (parsed?.type === SSE_EVENTS.DONE) {
         doneReceived = true;
       }
     };

@@ -1,6 +1,6 @@
 import { Button, Spin, Popconfirm } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
-import type { Conversation } from '../api/chatApi';
+import type { Conversation } from '../api/types';
 
 interface Props {
   conversations: Conversation[];

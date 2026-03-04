@@ -1,5 +1,6 @@
 package com.chatbi.agent.memory;
 
+import com.chatbi.common.constants.CacheKeyConstants;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.store.memory.chat.ChatMemoryStore;
 import lombok.RequiredArgsConstructor;
@@ -28,12 +29,10 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
 
     private final StringRedisTemplate redisTemplate;
 
-    private static final String KEY_PREFIX = "chatbi:memory:";
-    private static final String IDS_KEY = "chatbi:memory:ids";
 
     @Override
     public List<ChatMessage> getMessages(Object memoryId) {
-        String key = KEY_PREFIX + memoryId;
+        String key = CacheKeyConstants.MEMORY_PREFIX + memoryId;
         String json = redisTemplate.opsForValue().get(key);
         if (json == null || json.isBlank()) {
             return List.of();
@@ -48,11 +47,11 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
 
     @Override
     public void updateMessages(Object memoryId, List<ChatMessage> messages) {
-        String key = KEY_PREFIX + memoryId;
+        String key = CacheKeyConstants.MEMORY_PREFIX + memoryId;
         try {
             String json = messagesToJson(messages);
             redisTemplate.opsForValue().set(key, json);
-            redisTemplate.opsForSet().add(IDS_KEY, String.valueOf(memoryId));
+            redisTemplate.opsForSet().add(CacheKeyConstants.MEMORY_IDS_KEY, String.valueOf(memoryId));
         } catch (Exception e) {
             log.error("消息序列化失败, memoryId={}", memoryId, e);
         }
@@ -60,7 +59,7 @@ public class RedisChatMemoryStore implements ChatMemoryStore {
 
     @Override
     public void deleteMessages(Object memoryId) {
-        redisTemplate.delete(KEY_PREFIX + memoryId);
-        redisTemplate.opsForSet().remove(IDS_KEY, String.valueOf(memoryId));
+        redisTemplate.delete(CacheKeyConstants.MEMORY_PREFIX + memoryId);
+        redisTemplate.opsForSet().remove(CacheKeyConstants.MEMORY_IDS_KEY, String.valueOf(memoryId));
     }
 }

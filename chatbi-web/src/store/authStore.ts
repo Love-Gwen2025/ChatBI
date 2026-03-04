@@ -1,10 +1,6 @@
 import { create } from 'zustand';
-
-export interface UserInfo {
-  id: number;
-  username: string;
-  nickname: string;
-}
+import type { UserInfo } from '../api/types';
+import { STORAGE_KEYS } from '../constants';
 
 interface AuthState {
   token: string | null;
@@ -16,7 +12,7 @@ interface AuthState {
 }
 
 function loadUser(): UserInfo | null {
-  const saved = localStorage.getItem('chatbi_user');
+  const saved = localStorage.getItem(STORAGE_KEYS.USER);
   if (!saved) return null;
   try {
     return JSON.parse(saved);
@@ -26,22 +22,22 @@ function loadUser(): UserInfo | null {
 }
 
 function loadLastLoginProjectId(): number | null {
-  const saved = localStorage.getItem('chatbi_last_project_id');
+  const saved = localStorage.getItem(STORAGE_KEYS.LAST_PROJECT_ID);
   if (!saved) return null;
   const num = Number(saved);
   return isNaN(num) ? null : num;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  token: localStorage.getItem('chatbi_token'),
+  token: localStorage.getItem(STORAGE_KEYS.TOKEN),
   user: loadUser(),
   lastLoginProjectId: loadLastLoginProjectId(),
 
   setAuth: (token, user, lastLoginProjectId) => {
-    localStorage.setItem('chatbi_token', token);
-    localStorage.setItem('chatbi_user', JSON.stringify(user));
+    localStorage.setItem(STORAGE_KEYS.TOKEN, token);
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
     if (lastLoginProjectId != null) {
-      localStorage.setItem('chatbi_last_project_id', String(lastLoginProjectId));
+      localStorage.setItem(STORAGE_KEYS.LAST_PROJECT_ID, String(lastLoginProjectId));
     }
     set({
       token,
@@ -52,17 +48,17 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   setLastLoginProjectId: (projectId) => {
     if (projectId != null) {
-      localStorage.setItem('chatbi_last_project_id', String(projectId));
+      localStorage.setItem(STORAGE_KEYS.LAST_PROJECT_ID, String(projectId));
     } else {
-      localStorage.removeItem('chatbi_last_project_id');
+      localStorage.removeItem(STORAGE_KEYS.LAST_PROJECT_ID);
     }
     set({ lastLoginProjectId: projectId });
   },
 
   logout: () => {
-    localStorage.removeItem('chatbi_token');
-    localStorage.removeItem('chatbi_user');
-    localStorage.removeItem('chatbi_last_project_id');
+    localStorage.removeItem(STORAGE_KEYS.TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.USER);
+    localStorage.removeItem(STORAGE_KEYS.LAST_PROJECT_ID);
     set({ token: null, user: null, lastLoginProjectId: null });
   },
 }));

@@ -1,6 +1,7 @@
 package com.chatbi.project.controller;
 
 import com.chatbi.common.PageResponse;
+import com.chatbi.common.constants.RoleConstants;
 import com.chatbi.common.security.SessionService;
 import com.chatbi.common.security.UserContext;
 import com.chatbi.project.entity.Project;
@@ -34,7 +35,7 @@ public class ProjectController {
         // 若用户当前无 projectId，自动切换到新建项目
         if (UserContext.getProjectId() == null) {
             sessionService.updateProjectInSession(
-                    UserContext.getUserId(), project.getId(), project.getName(), "OWNER");
+                    UserContext.getUserId(), project.getId(), project.getName(), RoleConstants.OWNER);
         }
         return project;
     }
@@ -69,13 +70,13 @@ public class ProjectController {
 
     @PutMapping("/{id}")
     public Project update(@PathVariable Long id, @Valid @RequestBody UpdateProjectRequest request) {
-        projectService.requireRole(UserContext.getUserId(), id, "OWNER");
+        projectService.requireRole(UserContext.getUserId(), id, RoleConstants.OWNER);
         return projectService.updateProject(id, request.getName(), request.getDescription(), request.getTablePrefix());
     }
 
     @DeleteMapping("/{id}")
     public Map<String, Object> delete(@PathVariable Long id) {
-        projectService.requireRole(UserContext.getUserId(), id, "OWNER");
+        projectService.requireRole(UserContext.getUserId(), id, RoleConstants.OWNER);
         projectService.deleteProject(id);
         return Map.of("success", true);
     }
@@ -84,7 +85,7 @@ public class ProjectController {
 
     @PostMapping("/{id}/members")
     public Map<String, Object> addMember(@PathVariable Long id, @Valid @RequestBody AddMemberRequest request) {
-        projectService.requireRole(UserContext.getUserId(), id, "OWNER");
+        projectService.requireRole(UserContext.getUserId(), id, RoleConstants.OWNER);
         projectService.addMember(id, request.getUsername(), request.getRole());
         return Map.of("success", true);
     }
@@ -100,7 +101,7 @@ public class ProjectController {
 
     @DeleteMapping("/{id}/members/{userId}")
     public Map<String, Object> removeMember(@PathVariable Long id, @PathVariable Long userId) {
-        projectService.requireRole(UserContext.getUserId(), id, "OWNER");
+        projectService.requireRole(UserContext.getUserId(), id, RoleConstants.OWNER);
         projectService.removeMember(id, userId);
         return Map.of("success", true);
     }

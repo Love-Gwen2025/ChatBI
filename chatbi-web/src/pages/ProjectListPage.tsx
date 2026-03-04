@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { Button, Row, Col, message, Empty, Typography, Space, Popconfirm, Pagination } from 'antd';
 import { PlusOutlined, LogoutOutlined, DeleteOutlined, SettingOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { listProjects, createProject, deleteProject, type Project } from '../api/projectApi';
+import { listProjects, createProject, deleteProject } from '../api/projectApi';
+import type { Project } from '../api/types';
+import { PAGE_SIZES } from '../constants';
 import { useAuthStore } from '../store/authStore';
 import CreateProjectModal from '../components/CreateProjectModal';
 
@@ -24,7 +26,7 @@ export default function ProjectListPage() {
   const [creating, setCreating] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
-  const pageSize = 12;
+  const pageSize = PAGE_SIZES.PROJECTS;
 
   const load = async (p = page) => {
     try {

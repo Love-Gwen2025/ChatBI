@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chatbi.common.PageResponse;
+import com.chatbi.common.constants.InternalTableConstants;
 import com.chatbi.schema.entity.ColumnMeta;
 import com.chatbi.schema.entity.TableMeta;
 import com.chatbi.schema.mapper.ColumnMetaMapper;
@@ -40,10 +41,6 @@ public class SchemaService {
 
     private static final JiebaSegmenter SEGMENTER = new JiebaSegmenter();
 
-    private static final Set<String> INTERNAL_TABLES = Set.of(
-            "table_meta", "column_meta", "conversation",
-            "sys_user", "project", "user_project"
-    );
 
     public void requireTableInProject(Long tableId, Long projectId) {
         if (tableId == null || projectId == null) {
@@ -69,7 +66,7 @@ public class SchemaService {
                 String tableName = tables.getString("TABLE_NAME");
                 String tableComment = tables.getString("REMARKS");
 
-                if (INTERNAL_TABLES.contains(tableName)) {
+                if (InternalTableConstants.INTERNAL_TABLES.contains(tableName)) {
                     continue;
                 }
 

@@ -7,18 +7,13 @@ import {
   listMembers,
   addMember,
   removeMember,
-  type Project,
-  type Member,
 } from '../api/projectApi';
+import type { Member, ProjectContext } from '../api/types';
 import request from '../utils/request';
 import { useAuthStore } from '../store/authStore';
 import InviteMemberModal from '../components/InviteMemberModal';
 
 const { Title } = Typography;
-
-interface ProjectContext {
-  project: Project & { role: string };
-}
 
 export default function ProjectSettingsPage() {
   const navigate = useNavigate();

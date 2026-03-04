@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useParams, useNavigate } from 'react-router-dom';
 import { message } from 'antd';
-import { getProject, type Project } from '../api/projectApi';
+import { getProject } from '../api/projectApi';
+import type { Project } from '../api/types';
 import { switchProject } from '../api/authApi';
 import { useAuthStore } from '../store/authStore';
 

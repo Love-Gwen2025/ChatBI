@@ -1,11 +1,5 @@
 import request from '../utils/request';
-import type { UserInfo } from '../store/authStore';
-
-export interface AuthResponse {
-  token: string;
-  user: UserInfo;
-  lastLoginProjectId: number | null;
-}
+import type { UserInfo, AuthResponse } from './types';
 
 export const login = (username: string, password: string) =>
   request.post<AuthResponse>('/auth/login', { username, password });
