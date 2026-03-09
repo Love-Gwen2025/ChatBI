@@ -49,6 +49,21 @@ langchain4j:
 mcp:
   server:
     url: ${MCP_SERVER_URL:http://localhost:8000/mcp}
+    transport: ${MCP_SERVER_TRANSPORT:streamable-http}
+    timeout: ${MCP_SERVER_TIMEOUT:30s}
+    log-requests: ${MCP_SERVER_LOG_REQUESTS:true}
+    log-responses: ${MCP_SERVER_LOG_RESPONSES:true}
+
+observability:
+  langfuse:
+    enabled: ${LANGFUSE_ENABLED:false}
+    host: ${LANGFUSE_HOST:https://cloud.langfuse.com}
+    public-key: ${LANGFUSE_PUBLIC_KEY:}
+    secret-key: ${LANGFUSE_SECRET_KEY:}
+    otlp-endpoint: ${LANGFUSE_OTLP_ENDPOINT:}
+    environment: ${LANGFUSE_ENVIRONMENT:development}
+    service-name: ${LANGFUSE_SERVICE_NAME:chatbi-server}
+    service-version: ${CHATBI_RELEASE:local}
 
 jwt:
   secret: ${JWT_SECRET:ChatBI2026DefaultDevSecretKeyMustBeReplacedInProduction!!}

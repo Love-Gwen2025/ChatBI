@@ -68,6 +68,34 @@ CREATE TABLE IF NOT EXISTS conversation (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 聊天消息审计
+CREATE TABLE IF NOT EXISTS chat_message_record (
+    id              BIGSERIAL PRIMARY KEY,
+    trace_id        VARCHAR(64),
+    conversation_id BIGINT REFERENCES conversation(id) ON DELETE CASCADE,
+    project_id      BIGINT REFERENCES project(id) ON DELETE CASCADE,
+    user_id         BIGINT REFERENCES sys_user(id) ON DELETE SET NULL,
+    role            VARCHAR(32) NOT NULL,
+    content         TEXT,
+    metadata_json   TEXT,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 工具调用审计
+CREATE TABLE IF NOT EXISTS chat_tool_record (
+    id              BIGSERIAL PRIMARY KEY,
+    trace_id        VARCHAR(64),
+    conversation_id BIGINT REFERENCES conversation(id) ON DELETE CASCADE,
+    project_id      BIGINT REFERENCES project(id) ON DELETE CASCADE,
+    user_id         BIGINT REFERENCES sys_user(id) ON DELETE SET NULL,
+    tool_name       VARCHAR(64) NOT NULL,
+    status          VARCHAR(32) NOT NULL,
+    input_text      TEXT,
+    output_text     TEXT,
+    duration_ms     BIGINT,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- ==============================
 -- 示例业务表（Text2SQL 演示用）
 -- ==============================
@@ -186,3 +214,10 @@ ALTER TABLE table_meta ADD COLUMN IF NOT EXISTS schema_text TEXT;
 ALTER TABLE table_meta ADD COLUMN IF NOT EXISTS embedding vector(1024);
 ALTER TABLE conversation ADD COLUMN IF NOT EXISTS project_id BIGINT REFERENCES project(id) ON DELETE CASCADE;
 ALTER TABLE conversation ADD COLUMN IF NOT EXISTS user_id BIGINT REFERENCES sys_user(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS idx_table_meta_project_id ON table_meta(project_id);
+CREATE INDEX IF NOT EXISTS idx_conversation_project_user ON conversation(project_id, user_id);
+CREATE INDEX IF NOT EXISTS idx_chat_message_record_trace_id ON chat_message_record(trace_id);
+CREATE INDEX IF NOT EXISTS idx_chat_message_record_conversation_id ON chat_message_record(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_chat_tool_record_trace_id ON chat_tool_record(trace_id);
+CREATE INDEX IF NOT EXISTS idx_chat_tool_record_conversation_id ON chat_tool_record(conversation_id);

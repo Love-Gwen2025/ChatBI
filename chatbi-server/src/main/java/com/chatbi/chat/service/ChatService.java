@@ -11,6 +11,8 @@ import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.invocation.InvocationParameters;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
 import dev.langchain4j.service.TokenStream;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,8 +36,7 @@ public class ChatService {
     public String chat(String conversationId, String message) {
         conversationService.verifyConversationAccess(conversationId);
         log.info("会话[{}] 用户消息: {}", conversationId, message);
-        InvocationParameters params = buildInvocationParameters();
-        String response = assistant.chat(conversationId, message, params);
+        String response = assistant.chat(conversationId, message, buildInvocationParameters(conversationId, "sync"));
         log.info("会话[{}] AI 回复长度: {}", conversationId, response != null ? response.length() : 0);
         return response;
     }
@@ -43,13 +44,7 @@ public class ChatService {
     public TokenStream chatStream(String conversationId, String message) {
         conversationService.verifyConversationAccess(conversationId);
         log.info("会话[{}] 用户消息(stream): {}", conversationId, message);
-        InvocationParameters params = buildInvocationParameters();
-        return streamingAssistant.chat(conversationId, message, params);
-    }
-
-    private InvocationParameters buildInvocationParameters() {
-        Long projectId = UserContext.getProjectId();
-        return InvocationParameters.from(Map.of("projectId", projectId != null ? projectId : 0L));
+        return streamingAssistant.chat(conversationId, message, buildInvocationParameters(conversationId, "stream"));
     }
 
     public List<Map<String, Object>> getMessages(String conversationId) {
@@ -99,5 +94,35 @@ public class ChatService {
         }
 
         return result;
+    }
+
+    private InvocationParameters buildInvocationParameters(String conversationId, String chatMode) {
+        InvocationParameters parameters = new InvocationParameters();
+        parameters.put(ChatTraceKeys.PARAM_CONVERSATION_ID, conversationId);
+        parameters.put(ChatTraceKeys.PARAM_CHAT_MODE, chatMode);
+
+        Long projectId = UserContext.getProjectId();
+        if (projectId != null) {
+            parameters.put(ChatTraceKeys.PARAM_PROJECT_ID, projectId);
+        }
+
+        Long userId = UserContext.getUserId();
+        if (userId != null) {
+            parameters.put(ChatTraceKeys.PARAM_USER_ID, userId);
+        }
+
+        ChatTraceContext.TraceState traceState = ChatTraceContext.current();
+        if (traceState != null) {
+            parameters.put(ChatTraceKeys.PARAM_TRACE_ID, traceState.getTraceId());
+            parameters.put(ChatTraceKeys.PARAM_PARENT_SPAN_ID, traceState.currentParentSpanId());
+            return parameters;
+        }
+
+        SpanContext spanContext = Span.current().getSpanContext();
+        if (spanContext.isValid()) {
+            parameters.put(ChatTraceKeys.PARAM_TRACE_ID, spanContext.getTraceId());
+            parameters.put(ChatTraceKeys.PARAM_PARENT_SPAN_ID, spanContext.getSpanId());
+        }
+        return parameters;
     }
 }
