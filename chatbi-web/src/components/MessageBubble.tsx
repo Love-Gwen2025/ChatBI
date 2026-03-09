@@ -15,6 +15,8 @@ import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
+import ChartRenderer from './ChartRenderer';
+
 import type { ToolCallInfo, ChatMessage } from '../api/types';
 
 import { TOOL_LABELS, TOOL_ICONS } from '../constants';
@@ -314,8 +316,11 @@ export default function MessageBubble({ message: msg }: Props) {
                   <ReactMarkdown
                     components={{
                       code({ className, children, ...props }) {
-                        const match = /language-(\w+)/.exec(className || '');
+                        const match = /language-([\w-]+)/.exec(className || '');
                         const codeString = String(children).replace(/\n$/, '');
+                        if (match?.[1]?.toLowerCase() === 'chart') {
+                          return <ChartRenderer optionJson={codeString} />;
+                        }
                         if (match) {
                           return (
                             <SyntaxHighlighter
@@ -366,3 +371,4 @@ export default function MessageBubble({ message: msg }: Props) {
     </div>
   );
 }
+

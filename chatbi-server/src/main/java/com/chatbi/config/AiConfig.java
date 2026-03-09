@@ -3,6 +3,7 @@ package com.chatbi.config;
 import com.chatbi.agent.memory.RedisChatMemoryStore;
 import com.chatbi.agent.service.DataAnalysisAssistant;
 import com.chatbi.agent.service.StreamingDataAnalysisAssistant;
+import com.chatbi.agent.tool.ChatBiToolService;
 import com.chatbi.chat.service.McpToolTracingBridge;
 import com.chatbi.common.constants.AppConstants;
 import dev.langchain4j.mcp.McpToolProvider;
@@ -51,6 +52,7 @@ public class AiConfig {
 
         return McpToolProvider.builder()
                 .mcpClients(mcpClient)
+                .filter((client, tool) -> !"schema_search".equals(tool.name()) && !"execute_sql".equals(tool.name()))
                 .build();
     }
 
@@ -58,6 +60,7 @@ public class AiConfig {
     public DataAnalysisAssistant dataAnalysisAssistant(
             ChatModel chatModel,
             RedisChatMemoryStore chatMemoryStore,
+            ChatBiToolService chatBiToolService,
             McpToolProvider mcpToolProvider) {
         return AiServices.builder(DataAnalysisAssistant.class)
                 .chatModel(chatModel)
@@ -66,6 +69,7 @@ public class AiConfig {
                         .maxMessages(AppConstants.MAX_CHAT_MEMORY_MESSAGES)
                         .chatMemoryStore(chatMemoryStore)
                         .build())
+                .tools(chatBiToolService)
                 .toolProvider(mcpToolProvider)
                 .build();
     }
@@ -74,6 +78,7 @@ public class AiConfig {
     public StreamingDataAnalysisAssistant streamingDataAnalysisAssistant(
             StreamingChatModel streamingChatModel,
             RedisChatMemoryStore chatMemoryStore,
+            ChatBiToolService chatBiToolService,
             McpToolProvider mcpToolProvider) {
         return AiServices.builder(StreamingDataAnalysisAssistant.class)
                 .streamingChatModel(streamingChatModel)
@@ -82,6 +87,7 @@ public class AiConfig {
                         .maxMessages(AppConstants.MAX_CHAT_MEMORY_MESSAGES)
                         .chatMemoryStore(chatMemoryStore)
                         .build())
+                .tools(chatBiToolService)
                 .toolProvider(mcpToolProvider)
                 .build();
     }

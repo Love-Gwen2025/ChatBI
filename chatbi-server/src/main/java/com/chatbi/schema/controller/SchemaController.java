@@ -4,6 +4,7 @@ import com.chatbi.common.PageResponse;
 import com.chatbi.common.security.UserContext;
 import com.chatbi.schema.entity.ColumnMeta;
 import com.chatbi.schema.entity.TableMeta;
+import com.chatbi.schema.model.SchemaRecallResult;
 import com.chatbi.schema.service.SchemaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -62,6 +63,16 @@ public class SchemaController {
             throw new IllegalArgumentException("未选择项目");
         }
         return schemaService.searchAndBuildSchemaText(query, topK, projectId);
+    }
+
+    @GetMapping("/search/debug")
+    public SchemaRecallResult debugSearchSchema(@RequestParam String query,
+                                                @RequestParam(defaultValue = "5") int topK) {
+        Long projectId = UserContext.getProjectId();
+        if (projectId == null) {
+            throw new IllegalArgumentException("未选择项目");
+        }
+        return schemaService.searchSchema(query, projectId, topK);
     }
 
     @PostMapping("/reindex")

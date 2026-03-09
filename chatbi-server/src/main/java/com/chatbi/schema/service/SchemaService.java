@@ -4,16 +4,18 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.chatbi.common.PageResponse;
+import com.chatbi.common.constants.AppConstants;
 import com.chatbi.common.constants.InternalTableConstants;
 import com.chatbi.schema.entity.ColumnMeta;
 import com.chatbi.schema.entity.TableMeta;
 import com.chatbi.schema.mapper.ColumnMetaMapper;
 import com.chatbi.schema.mapper.TableMetaMapper;
+import com.chatbi.schema.model.SchemaRecallCandidate;
+import com.chatbi.schema.model.SchemaRecallResult;
 import com.github.yulichang.wrapper.MPJLambdaWrapper;
+import com.huaban.analysis.jieba.JiebaSegmenter;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.model.embedding.EmbeddingModel;
-import com.huaban.analysis.jieba.JiebaSegmenter;
-import com.huaban.analysis.jieba.SegToken;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -25,7 +27,14 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -33,14 +42,20 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SchemaService {
 
+    private static final JiebaSegmenter SEGMENTER = new JiebaSegmenter();
+    private static final Map<String, List<String>> QUERY_SYNONYMS = Map.of(
+            "营收", List.of("销售额", "金额", "amount"),
+            "销量", List.of("数量", "quantity"),
+            "客户", List.of("customer", "customers"),
+            "产品", List.of("product", "products"),
+            "订单", List.of("order", "orders")
+    );
+
     private final TableMetaMapper tableMetaMapper;
     private final ColumnMetaMapper columnMetaMapper;
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
     private final EmbeddingModel embeddingModel;
-
-    private static final JiebaSegmenter SEGMENTER = new JiebaSegmenter();
-
 
     public void requireTableInProject(Long tableId, Long projectId) {
         if (tableId == null || projectId == null) {
@@ -123,12 +138,6 @@ public class SchemaService {
         return columns;
     }
 
-    // ========== 向量化 ==========
-
-    /**
-     * 为单张表生成 schema_text 和 embedding 并存入 DB。
-     * schema_text 同时用于：1) embedding 输入  2) LLM prompt 输出
-     */
     private void generateAndStoreEmbedding(TableMeta table, List<ColumnMeta> columns) {
         try {
             String schemaText = buildSchemaText(table, columns);
@@ -145,9 +154,6 @@ public class SchemaService {
         }
     }
 
-    /**
-     * 对项目下所有表重新生成 embedding
-     */
     public int reindexEmbeddings(Long projectId) {
         List<TableMeta> tables = tableMetaMapper.selectList(
                 new LambdaQueryWrapper<TableMeta>().eq(TableMeta::getProjectId, projectId));
@@ -173,11 +179,6 @@ public class SchemaService {
         return sb.toString();
     }
 
-    // ========== 搜索 ==========
-
-    /**
-     * 向量相似度搜索
-     */
     public List<TableMeta> vectorSearch(String query, int topK, Long projectId) {
         try {
             Embedding queryEmbedding = embeddingModel.embed(query).content();
@@ -200,21 +201,15 @@ public class SchemaService {
                     },
                     projectId, vectorStr, topK);
         } catch (Exception e) {
-            log.warn("向量搜索失败，回退到 ILIKE: {}", e.getMessage());
+            log.warn("向量搜索失败，回退到关键词召回: {}", e.getMessage());
             return List.of();
         }
     }
 
-    /**
-     * ILIKE 搜索（单关键词，含字段级，MPJ Lambda JOIN）
-     */
     public List<TableMeta> searchTablesWithColumns(String keyword, int topK, Long projectId) {
         return searchTablesWithColumns(List.of(keyword), topK, projectId);
     }
 
-    /**
-     * ILIKE 搜索（多关键词合并为一条 SQL，OR 拼接，1 次 DB 往返）
-     */
     public List<TableMeta> searchTablesWithColumns(List<String> keywords, int topK, Long projectId) {
         if (keywords.isEmpty()) {
             return List.of();
@@ -244,53 +239,142 @@ public class SchemaService {
         return tableMetaMapper.selectJoinList(TableMeta.class, wrapper);
     }
 
-    /**
-     * 混合搜索：向量 + ILIKE（jieba 分词），合并去重
-     */
-    public String searchAndBuildSchemaText(String query, int topK, Long projectId) {
-        // 1. 向量搜索
-        List<TableMeta> results = new ArrayList<>(vectorSearch(query, topK, projectId));
-        Set<Long> seen = results.stream().map(TableMeta::getId).collect(Collectors.toSet());
+    public SchemaRecallResult searchSchema(String query, Long projectId, int topK) {
+        List<String> expandedQueries = buildExpandedQueries(query);
+        List<TableMeta> denseCandidates = vectorSearch(query, Math.max(topK, AppConstants.SCHEMA_VECTOR_TOP_K), projectId);
+        List<TableMeta> sparseCandidates = searchTablesWithColumns(expandedQueries, Math.max(topK, AppConstants.SCHEMA_KEYWORD_TOP_K), projectId);
+        List<SchemaRecallCandidate> rankedCandidates = fuseAndRerank(query, expandedQueries, denseCandidates, sparseCandidates);
+        List<SchemaRecallCandidate> topCandidates = rankedCandidates.stream().limit(topK).toList();
 
-        // 2. jieba 分词，收集所有关键词（分词结果 + 原始 query）
-        List<String> keywords = new ArrayList<>(
-                SEGMENTER.process(query, JiebaSegmenter.SegMode.SEARCH)
-                        .stream()
-                        .map(token -> token.word.trim())
-                        .filter(w -> w.length() >= 2)
-                        .distinct()
-                        .toList());
-        if (query.length() >= 2 && !keywords.contains(query)) {
-            keywords.add(query);
-        }
-
-        // 3. 一次 DB 查询完成所有关键词的 ILIKE 匹配
-        for (TableMeta t : searchTablesWithColumns(keywords, topK, projectId)) {
-            if (seen.add(t.getId())) {
-                results.add(t);
-            }
-        }
-
-        // 4. 截断
-        if (results.size() > topK) {
-            results = results.subList(0, topK);
-        }
-
-        // 5. 拼接 schema_text
-        if (results.isEmpty()) {
-            return "未找到与查询相关的表。";
-        }
-        return results.stream()
-                .map(t -> t.getSchemaText() != null ? t.getSchemaText()
-                        : "表名: " + t.getTableName())
+        String schemaText = topCandidates.isEmpty()
+                ? "未找到与查询相关的表。"
+                : topCandidates.stream()
+                .map(candidate -> {
+                    TableMeta table = candidate.getTable();
+                    return table.getSchemaText() != null ? table.getSchemaText() : buildSchemaText(table.getId());
+                })
                 .collect(Collectors.joining("\n---\n"));
+
+        return SchemaRecallResult.builder()
+                .schemaText(schemaText)
+                .expandedQueries(expandedQueries)
+                .candidates(topCandidates)
+                .build();
     }
 
-    // ========== Schema 文本构建 ==========
+    public String searchAndBuildSchemaText(String query, int topK, Long projectId) {
+        return searchSchema(query, projectId, topK).getSchemaText();
+    }
 
-    /**
-     * 构建单表 schema 文本（统一格式，用于 embedding 输入和 LLM prompt 输出）
-     */
+    public Set<String> listProjectTableNames(Long projectId) {
+        return tableMetaMapper.selectList(
+                        new LambdaQueryWrapper<TableMeta>()
+                                .eq(TableMeta::getProjectId, projectId)
+                                .select(TableMeta::getTableName))
+                .stream()
+                .map(TableMeta::getTableName)
+                .filter(name -> name != null && !name.isBlank())
+                .map(name -> name.toLowerCase(Locale.ROOT))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private List<String> buildExpandedQueries(String query) {
+        LinkedHashSet<String> expanded = new LinkedHashSet<>();
+        if (query != null && query.length() >= 2) {
+            expanded.add(query.trim());
+        }
+        SEGMENTER.process(query, JiebaSegmenter.SegMode.SEARCH)
+                .stream()
+                .map(token -> token.word.trim())
+                .filter(word -> word.length() >= 2)
+                .forEach(expanded::add);
+
+        List<String> snapshot = new ArrayList<>(expanded);
+        for (String term : snapshot) {
+            QUERY_SYNONYMS.forEach((key, synonyms) -> {
+                if (term.contains(key) || key.contains(term)) {
+                    expanded.addAll(synonyms);
+                }
+            });
+        }
+        return new ArrayList<>(expanded);
+    }
+
+    private List<SchemaRecallCandidate> fuseAndRerank(String query,
+                                                      List<String> expandedQueries,
+                                                      List<TableMeta> denseCandidates,
+                                                      List<TableMeta> sparseCandidates) {
+        Map<Long, RecallAccumulator> accumulators = new LinkedHashMap<>();
+        applyRrfScores(accumulators, denseCandidates, true);
+        applyRrfScores(accumulators, sparseCandidates, false);
+
+        String rawQuery = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
+        return accumulators.values().stream()
+                .map(accumulator -> toCandidate(accumulator, expandedQueries, rawQuery))
+                .sorted(Comparator.comparingDouble(SchemaRecallCandidate::getRerankScore).reversed()
+                        .thenComparingDouble(SchemaRecallCandidate::getFusionScore).reversed())
+                .toList();
+    }
+
+    private void applyRrfScores(Map<Long, RecallAccumulator> accumulators, List<TableMeta> candidates, boolean dense) {
+        for (int i = 0; i < candidates.size(); i++) {
+            TableMeta table = candidates.get(i);
+            RecallAccumulator accumulator = accumulators.computeIfAbsent(table.getId(), key -> new RecallAccumulator(table));
+            double score = 1.0d / (AppConstants.RRF_K + i + 1);
+            if (dense) {
+                accumulator.vectorScore += score;
+                accumulator.denseHit = true;
+            } else {
+                accumulator.keywordScore += score;
+                accumulator.sparseHit = true;
+            }
+        }
+    }
+
+    private SchemaRecallCandidate toCandidate(RecallAccumulator accumulator, List<String> expandedQueries, String rawQuery) {
+        TableMeta table = accumulator.table;
+        String schemaText = table.getSchemaText() != null ? table.getSchemaText() : buildSchemaText(table.getId());
+        String normalizedSchema = schemaText.toLowerCase(Locale.ROOT);
+        List<String> matchedKeywords = expandedQueries.stream()
+                .filter(keyword -> keyword != null && !keyword.isBlank())
+                .filter(keyword -> normalizedSchema.contains(keyword.toLowerCase(Locale.ROOT)))
+                .limit(8)
+                .toList();
+
+        double fusionScore = accumulator.vectorScore + accumulator.keywordScore;
+        double rerankScore = fusionScore;
+        if (accumulator.denseHit && accumulator.sparseHit) {
+            rerankScore += 0.18d;
+        }
+        rerankScore += Math.min(0.42d, matchedKeywords.size() * 0.07d);
+        if (!rawQuery.isBlank() && table.getTableName() != null && table.getTableName().toLowerCase(Locale.ROOT).contains(rawQuery)) {
+            rerankScore += 0.2d;
+        }
+        if (!rawQuery.isBlank() && table.getTableComment() != null && table.getTableComment().toLowerCase(Locale.ROOT).contains(rawQuery)) {
+            rerankScore += 0.12d;
+        }
+
+        return SchemaRecallCandidate.builder()
+                .table(table)
+                .matchedKeywords(matchedKeywords)
+                .vectorScore(accumulator.vectorScore)
+                .keywordScore(accumulator.keywordScore)
+                .fusionScore(fusionScore)
+                .rerankScore(rerankScore)
+                .strategy(resolveStrategy(accumulator))
+                .build();
+    }
+
+    private String resolveStrategy(RecallAccumulator accumulator) {
+        if (accumulator.denseHit && accumulator.sparseHit) {
+            return "dense+sparse+rerank";
+        }
+        if (accumulator.denseHit) {
+            return "dense";
+        }
+        return "sparse";
+    }
+
     private String buildSchemaText(TableMeta table, List<ColumnMeta> columns) {
         StringBuilder sb = new StringBuilder();
         sb.append("表名: ").append(table.getTableName());
@@ -313,9 +397,6 @@ public class SchemaService {
         return sb.toString();
     }
 
-    /**
-     * 通过 tableId 获取 schema 文本（优先读缓存，未生成时实时构建）
-     */
     public String buildSchemaText(Long tableId) {
         TableMeta table = tableMetaMapper.selectById(tableId);
         if (table == null) {
@@ -327,8 +408,6 @@ public class SchemaService {
         List<ColumnMeta> columns = getColumns(tableId);
         return buildSchemaText(table, columns);
     }
-
-    // ========== 列表查询 ==========
 
     public PageResponse<TableMeta> listTables(Long projectId, int page, int size) {
         IPage<TableMeta> result = tableMetaMapper.selectPage(
@@ -351,5 +430,17 @@ public class SchemaService {
                         .eq(ColumnMeta::getTableId, tableId)
                         .orderByAsc(ColumnMeta::getOrdinal));
         return PageResponse.of(result);
+    }
+
+    private static class RecallAccumulator {
+        private final TableMeta table;
+        private double vectorScore;
+        private double keywordScore;
+        private boolean denseHit;
+        private boolean sparseHit;
+
+        private RecallAccumulator(TableMeta table) {
+            this.table = table;
+        }
     }
 }
